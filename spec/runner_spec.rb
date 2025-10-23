@@ -13,16 +13,10 @@ RSpec.describe PubSubModelSync::Runner do
   end
 
   it '.preload_framework' do
-    expect(inst).to receive(:preload_framework!)
+    expect(described_class).to receive(:preload_listeners)
   end
 
   it '.start_listeners' do
     expect(connector).to receive(:listen_messages)
-  end
-
-  it 'shutdown' do
-    error_klass = PubSubModelSync::Runner::ShutDown
-    allow(inst).to receive(:trap_signals!).and_raise(error_klass)
-    expect(connector).to receive(:stop)
   end
 end

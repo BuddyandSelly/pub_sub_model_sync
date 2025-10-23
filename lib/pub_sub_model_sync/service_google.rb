@@ -7,61 +7,122 @@ end
 
 module PubSubModelSync
   class ServiceGoogle < ServiceBase
-    attr_accessor :service, :topic, :subscription, :config, :subscriber
+    LISTEN_SETTINGS = { message_ordering: true }.freeze
+    PUBLISH_SETTINGS = {}.freeze
+    TOPIC_SETTINGS = {}.freeze
+    SUBSCRIPTION_SETTINGS = { message_ordering: true }.freeze
+
+    # @!attribute topics (Hash): { key: Topic1, ... }
+    # @!attribute publish_topics (Hash): { key: Topic1, ... }
+    attr_accessor :service, :topics, :subscribers, :publish_topics
 
     def initialize
-      @config = PubSubModelSync::Config
       @service = Google::Cloud::Pubsub.new(project: config.project,
                                            credentials: config.credentials)
-      @topic = service.topic(config.topic_name) ||
-               service.create_topic(config.topic_name)
+      Array(config.topic_name || 'model_sync').each(&method(:init_topic))
     end
 
     def listen_messages
-      @subscription = subscribe_to_topic
-      @subscriber = subscription.listen(&method(:process_message))
       log('Listener starting...')
-      subscriber.start
+      @subscribers = subscribe_to_topics
       log('Listener started')
       sleep
-      subscriber.stop.wait!
+      subscribers.each { |subscriber| subscriber.stop.wait! }
       log('Listener stopped')
     end
 
-    def publish(data, attributes)
-      log("Publishing message: #{[attributes, data]}")
-      payload = { data: data, attributes: attributes }.to_json
-      topic.publish(payload, { SERVICE_KEY => true })
-    rescue => e
-      info = [attributes, data, e.message, e.backtrace]
-      log("Error publishing: #{info}", :error)
+    # @param payload (PubSubModelSync::Payload)
+    def publish(payload)
+      p_topic_names = Array(payload.headers[:topic_name] || config.default_topic_name)
+      message_topics = p_topic_names.map(&method(:find_topic))
+      message_topics.each { |topic| publish_to_topic(topic, payload) }
     end
 
     def stop
       log('Listener stopping...')
-      subscriber.stop!
+      (subscribers || []).each(&:stop!)
     end
 
     private
 
-    def subscribe_to_topic
-      topic.subscription(config.subscription_name) ||
-        topic.subscribe(config.subscription_name)
+    def find_topic(topic_name)
+      topic_name = topic_name.to_s
+      return topics.values.first unless topic_name.present?
+
+      topics[topic_name] || publish_topics[topic_name] || init_topic(topic_name, only_publish: true)
+    end
+
+    def publish_to_topic(topic, payload)
+      retries ||= 0
+      publish_message(topic, payload)
+    rescue Google::Cloud::PubSub::OrderingKeyError => e
+      raise if (retries += 1) > 1
+
+      log("Resuming ordering_key and retrying OrderingKeyError for #{payload.uuid}: #{e.message}")
+      topic.resume_publish(payload.ordering_key)
+      retry
+    end
+
+    def publish_message(topic, payload)
+      settings = { ordering_key: payload.ordering_key }
+      if config.sync_mode
+        topic.publish(*message_params(payload), **settings)
+      else
+        topic.publish_async(*message_params(payload), **settings) { |result| check_async_result(result, payload) }
+      end
+    end
+
+    def check_async_result(result, payload)
+      log "Published message: #{payload.uuid} (via async)" if result.succeeded? && config.debug
+      return if result.succeeded?
+
+      log("Error publishing: #{[payload, result.error]} (via async)", :error)
+      config.on_error_publish.call(StandardError.new(result.error), { payload: payload })
+    end
+
+    # @param only_publish (Boolean): if false is used to listen and publish messages
+    # @return (Topic): returns created or loaded topic
+    def init_topic(topic_name, only_publish: false)
+      topic_name = topic_name.to_s
+      @topics ||= {}
+      @publish_topics ||= {}
+      topic = service.topic(topic_name) || service.create_topic(topic_name, TOPIC_SETTINGS)
+      topic.enable_message_ordering!
+      publish_topics[topic_name] = topic if only_publish
+      topics[topic_name] = topic unless only_publish
+      topic
+    end
+
+    # @param payload (PubSubModelSync::Payload)
+    # @return [Array]
+    def message_params(payload)
+      [
+        encode_payload(payload),
+        { SERVICE_KEY => true }.merge(PUBLISH_SETTINGS)
+      ]
+    end
+
+    # @return [Array<Subscriber>]
+    def subscribe_to_topics
+      topics.map do |key, topic|
+        subs_name = "#{config.subscription_key}_#{key}"
+        subscription = topic.subscription(subs_name) || topic.subscribe(subs_name, **SUBSCRIPTION_SETTINGS)
+        subscriber = subscription.listen(**LISTEN_SETTINGS, &method(:process_message))
+        subscriber.on_error { |error| log("Subscriber error: #{error.class} #{error.message}", :error) }
+        subscriber.start
+        log("Subscribed to topic: #{topic.name} as: #{subs_name}")
+        subscriber
+      end
     end
 
     def process_message(received_message)
       message = received_message.message
-      return unless message.attributes[SERVICE_KEY]
-
-      perform_message(message.data)
-    rescue => e
-      log("Error processing message: #{[received_message, e.message]}", :error)
-    ensure
+      if message.attributes[SERVICE_KEY]
+        super(message.data)
+      elsif config.debug
+        log("Unknown message (#{SERVICE_KEY}): #{[message, message.attributes]}")
+      end
       received_message.acknowledge!
-    end
-
-    def log(msg, kind = :info)
-      config.log("Google Service ==> #{msg}", kind)
     end
   end
 end

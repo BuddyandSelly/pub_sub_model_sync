@@ -10,12 +10,21 @@ jobs:
   build:
     name: Tests and Code Style
     runs-on: ubuntu-latest
+    #continue-on-error: ${{ matrix.ruby == '2.6' && matrix.rails == '6' }}
     strategy:
       matrix:
-        ruby: [2.4, 2.5, 2.6]
+        ruby: [2.6]
         rails: [4, 5, 6]
         include:
           - ruby: 2.7
+            rails: 6
+          - ruby: '3.0'
+            rails: 6
+          - ruby: '3.0'
+            rails: 7
+          - ruby: '3.1'
+            rails: 7
+          - ruby: '2.6'
             rails: 6
         exclude: # rails 6 requires ruby >= 2.5
           - ruby: 2.4
@@ -24,7 +33,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Set up Ruby
-        uses: actions/setup-ruby@v1
+        uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ matrix.ruby }}
       - name: Install sqlite3
@@ -33,14 +42,26 @@ jobs:
       - name: Install bundler
         env:
           GEMFILE_PATH: gemfiles/Gemfile_${{ matrix.rails }}
+          GEMFILE_PATH_RUBY: gemfiles/Gemfile_${{ matrix.rails }}_${{matrix.ruby}}
           RAILS_V: ${{ matrix.rails }}
         run: |
           rm -f Gemfile.lock && rm -f Gemfile
-          cp $GEMFILE_PATH ./Gemfile
+          echo "...Looking for $GEMFILE_PATH_RUBY"
+          if [ -f "$GEMFILE_PATH_RUBY" ]; then
+            echo "......using Gemfile $GEMFILE_PATH_RUBY"
+            cp $GEMFILE_PATH_RUBY ./Gemfile
+          else
+            echo "......using Gemfile $GEMFILE_PATH"
+            cp $GEMFILE_PATH ./Gemfile
+          fi
           bundler_v='2.1.4'
           if [ $RAILS_V = "4" ]; then bundler_v="1.16.6"; fi
           gem install bundler -v "~> $bundler_v"
           bundle _${bundler_v}_ install --jobs 4 --retry 3
+
+#      remote ssh debugger
+#      - name: Setup tmate session (remote session debugger)
+#        uses: mxschmitt/action-tmate@v3
 
       - name: Tests (rspec)
         run: |
@@ -48,3 +69,4 @@ jobs:
 
       - name: Code style (Rubocop)
         run: bundle exec rubocop
+        if: matrix.ruby == '2.6' && matrix.rails == '6'

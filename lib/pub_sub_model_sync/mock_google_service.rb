@@ -13,6 +13,10 @@ module PubSubModelSync
         true
       end
 
+      def on_error(&_block)
+        true
+      end
+
       def stop
         @stop ||= MockStop.new
       end
@@ -26,12 +30,28 @@ module PubSubModelSync
     end
 
     class MockTopic
+      def name
+        'name'
+      end
+
       def subscription(*_args)
         @subscription ||= MockSubscription.new
       end
       alias subscribe subscription
 
       def publish(*_args)
+        true
+      end
+
+      def publish_async(*_args)
+        yield(OpenStruct.new(succeeded?: true)) if block_given?
+      end
+
+      def resume_publish(_ordering_key)
+        true
+      end
+
+      def enable_message_ordering!
         true
       end
     end

@@ -7,98 +7,102 @@ end
 
 module PubSubModelSync
   class ServiceRabbit < ServiceBase
-    attr_accessor :service, :channel, :queue, :topic
-    attr_accessor :config
+    QUEUE_SETTINGS = { durable: true, auto_delete: false }.freeze
+    LISTEN_SETTINGS = { manual_ack: true }.freeze
+    PUBLISH_SETTINGS = {}.freeze
+
+    # @!attribute topic_names (Array): ['Topic 1', 'Topic 2']
+    # @!attribute channels (Array): [Channel1]
+    # @!attribute exchanges (Hash<key: Exchange>): {topic_name: Exchange1}
+    attr_accessor :service, :topic_names, :channels, :exchanges
 
     def initialize
-      @config = PubSubModelSync::Config
       @service = Bunny.new(*config.bunny_connection)
+      @topic_names = Array(config.topic_name || 'model_sync')
+      @channels = []
+      @exchanges = {}
     end
 
     def listen_messages
       log('Listener starting...')
-      subscribe_to_queue
+      subscribe_to_queues do |queue|
+        queue.subscribe(LISTEN_SETTINGS) { |info, meta, payload| process_message(queue, info, meta, payload) }
+      end
       log('Listener started')
-      queue.subscribe(subscribe_settings, &method(:process_message))
       loop { sleep 5 }
     rescue PubSubModelSync::Runner::ShutDown
-      raise
+      log('Listener stopped')
     rescue => e
       log("Error listening message: #{[e.message, e.backtrace]}", :error)
     end
 
-    def publish(data, attributes)
-      log("Publishing: #{[attributes, data]}")
-      deliver_data(data, attributes)
-    # TODO: max retry
-    rescue Timeout::Error => e
-      log("Error publishing (retrying....): #{e.message}", :error)
-      initialize
-      retry
+    def publish(payload)
+      qty_retry ||= 0
+      deliver_data(payload)
     rescue => e
-      info = [attributes, data, e.message, e.backtrace]
-      log("Error publishing: #{info}", :error)
+      if e.is_a?(Timeout::Error) && (qty_retry += 1) <= 2
+        log("Error publishing (retrying....): #{e.message}", :error)
+        initialize
+        retry
+      end
+      raise
     end
 
     def stop
       log('Listener stopping...')
+      channels.each(&:close)
       service.close
     end
 
     private
 
-    def message_settings
+    def message_settings(payload)
       {
-        routing_key: queue.name,
+        routing_key: payload.headers[:ordering_key],
         type: SERVICE_KEY,
-        app_id: app_id
-      }
+        persistent: true
+      }.merge(PUBLISH_SETTINGS)
     end
 
-    def subscribe_settings
-      { manual_ack: false }
+    def process_message(queue, delivery_info, meta_info, payload)
+      if meta_info[:type] == SERVICE_KEY
+        super(payload)
+      elsif config.debug
+        log("Unknown message (#{SERVICE_KEY}): #{[payload, meta_info]}")
+      end
+      queue.channel.ack(delivery_info.delivery_tag)
     end
 
-    def process_message(_delivery_info, meta_info, payload)
-      return unless meta_info[:type] == SERVICE_KEY
-      return if meta_info[:app_id] && meta_info[:app_id] == app_id
-
-      perform_message(payload)
-    rescue => e
-      error = [payload, e.message, e.backtrace]
-      log("Error processing message: #{error}", :error)
+    def subscribe_to_queues(&block)
+      @channels = []
+      topic_names.each do |topic_name|
+        subscribe_to_exchange(topic_name) do |channel, exchange|
+          queue = channel.queue(config.subscription_key, QUEUE_SETTINGS)
+          queue.bind(exchange)
+          @channels << channel
+          log("Subscribed to topic: #{topic_name} as #{queue.name}")
+          block.call(queue)
+        end
+      end
     end
 
-    def app_id
-      (Rails.application.class.parent_name rescue '') # rubocop:disable Style/RescueModifier
+    def subscribe_to_exchange(topic_name, &block)
+      topic_name = topic_name.to_s
+      exchanges[topic_name] ||= begin
+        service.start
+        channel = service.create_channel
+        channel.fanout(topic_name)
+      end
+      block.call(channel, exchanges[topic_name])
     end
 
-    def subscribe_to_queue
-      service.start
-      @channel = service.create_channel
-      queue_settings = { durable: true, auto_delete: false }
-      @queue = channel.fanout(config.queue_name, queue_settings)
-      subscribe_to_topic
-    end
-
-    def subscribe_to_topic
-      @topic = channel.topic(config.topic_name)
-      queue.bind(topic, routing_key: queue.name)
-    end
-
-    def log(msg, kind = :info)
-      config.log("Rabbit Service ==> #{msg}", kind)
-    end
-
-    def deliver_data(data, attributes)
-      subscribe_to_queue
-      payload = { data: data, attributes: attributes }
-      topic.publish(payload.to_json, message_settings)
-
-      # Ugly fix: "IO timeout when reading 7 bytes"
-      # https://stackoverflow.com/questions/39039129/rabbitmq-timeouterror-io-timeout-when-reading-7-bytes
-      channel.close
-      service.close
+    def deliver_data(payload)
+      message_topics = Array(payload.headers[:topic_name] || config.default_topic_name)
+      message_topics.each do |topic_name|
+        subscribe_to_exchange(topic_name) do |_channel, exchange|
+          exchange.publish(encode_payload(payload), message_settings(payload))
+        end
+      end
     end
   end
 end

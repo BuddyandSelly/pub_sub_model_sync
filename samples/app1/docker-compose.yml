@@ -1,0 +1,34 @@
+version: "3.7"
+
+networks:
+  shared_app_services:
+    external: true
+volumes:
+  shared-pubsub-data:
+  bundler_gems:
+
+services:
+  pubsub:
+    image: rabbitmq:3-management-alpine
+    volumes:
+      - shared-pubsub-data:/var/lib/rabbitmq/
+      - shared-pubsub-data:/var/log/rabbitmq/
+      - shared-pubsub-data:/etc/rabbitmq/
+    ports:
+      - 5672:5672
+      - 15672:15672
+    networks:
+      - shared_app_services
+
+  app:
+    build:
+      context: .
+    volumes:
+      - ./:/app
+      - bundler_gems:/usr/local/bundle/
+    depends_on:
+      - pubsub
+    external_links:
+      - pubsub
+    networks: # required to connect to pubsub
+      - shared_app_services

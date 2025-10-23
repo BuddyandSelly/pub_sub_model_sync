@@ -4,15 +4,18 @@ lib = File.expand_path('lib', __dir__)
 $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
 require 'pub_sub_model_sync/version'
 
-Gem::Specification.new do |spec|
-  spec.required_ruby_version = '>= 2.4'
+Gem::Specification.new do |spec| # rubocop:disable Metrics/BlockLength
+  spec.required_ruby_version = '>= 2.4' # rubocop:disable Gemspec/RequiredRubyVersion
   spec.name          = 'pub_sub_model_sync'
   spec.version       = PubSubModelSync::VERSION
   spec.authors       = ['Owen']
   spec.email         = ['owenperedo@gmail.com']
 
-  spec.summary       = 'Permit to sync models between apps through pub/sub'
-  spec.description   = 'Permit to sync models between apps through pub/sub'
+  spec.summary       = 'This gem permits to sync automatically models and custom data between multiple Rails
+    applications by publishing notifications via pubsub (Google PubSub, RabbitMQ, or Apache Kafka) and automatically
+    processed by all connected applications. Out of the scope, this gem includes transactions to keep Data consistency
+    by processing notifications in the order they were delivered.'
+  spec.description   = spec.summary
   spec.homepage      = 'https://github.com/owen2345/pub_sub_model_sync'
   spec.license       = 'MIT'
 
@@ -27,7 +30,7 @@ Gem::Specification.new do |spec|
   # into git.
   spec.files = Dir.chdir(File.expand_path(__dir__)) do
     `git ls-files -z`.split("\x0")
-                     .reject { |f| f.match(%r{^(test|spec|features)/}) }
+                     .reject { |f| f.match(%r{^(test|spec|features|samples)/}) }
   end
   spec.bindir        = 'exe'
   spec.executables   = spec.files.grep(%r{^exe/}) { |f| File.basename(f) }
@@ -38,5 +41,4 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency 'bundler'
   spec.add_development_dependency 'rake'
   spec.add_development_dependency 'rspec'
-  spec.add_development_dependency 'sqlite3'
 end

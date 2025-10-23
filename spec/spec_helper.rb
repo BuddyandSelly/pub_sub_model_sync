@@ -16,6 +16,8 @@ end
 
 # raise sync errors during tests
 PubSubModelSync::Config.logger = :raise_error
+PubSubModelSync::Config.debug = true
+PubSubModelSync::Config.topic_name = 'ps_sync'
 
 RSpec.configure do |config|
   # Enable flags like --only-failures and --next-failure
@@ -26,6 +28,11 @@ RSpec.configure do |config|
 
   config.expect_with :rspec do |c|
     c.syntax = :expect
+  end
+
+  config.before(:each) do
+    klass = PubSubModelSync::ServiceBase
+    allow_any_instance_of(klass).to receive(:same_app_message?).and_return(false)
   end
 
   # mock google service
@@ -45,6 +52,11 @@ RSpec.configure do |config|
     kafka_mock = PubSubModelSync::MockKafkaService.new
     allow(Kafka).to receive(:new).and_return(kafka_mock)
   end
+
+  # silence default exception from on_error_processing hook
+  config.before(:each) do
+    allow(PubSubModelSync::Config.on_error_processing).to receive(:call)
+  end
 end
 
 # database cleaner
@@ -53,6 +65,10 @@ RSpec.configure do |config|
   config.before(:suite) do
     DatabaseCleaner.strategy = :deletion
     DatabaseCleaner.clean_with(:truncation)
+  end
+
+  config.before(:each, truncate: true) do
+    DatabaseCleaner.strategy = :truncation
   end
 
   config.around(:each) do |example|
