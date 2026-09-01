@@ -1,6 +1,20 @@
 # frozen_string_literal: true
 
 require 'bundler/setup'
+require 'simplecov'
+
+SimpleCov.start do
+  enable_coverage :branch
+  primary_coverage :branch
+
+  # Everything the gem ships has to be covered, whether it was loaded or not.
+  cover 'lib/**/*.{rb,rake}'
+  # Loaded by the gemspec, and therefore by bundler, before coverage starts.
+  skip 'lib/pub_sub_model_sync/version.rb'
+
+  minimum_coverage line: 100, branch: 100
+end
+
 require 'pub_sub_model_sync'
 require 'active_record'
 require 'spec_init_model'

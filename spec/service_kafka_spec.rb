@@ -35,6 +35,24 @@ RSpec.describe PubSubModelSync::ServiceKafka do
     end
   end
 
+  describe '.listen_messages when it goes wrong' do
+    it 'lets a shut down through' do
+      shut_down = PubSubModelSync::Runner::ShutDown
+      allow(inst).to receive(:start_consumer).and_raise(shut_down)
+
+      expect { inst.listen_messages }.to raise_error(shut_down)
+    end
+
+    it 'prints any other error' do
+      error = 'Connection lost'
+      allow(inst).to receive(:start_consumer).and_raise(error)
+      allow(inst).to receive(:log)
+      expect(inst).to receive(:log).with(include(error), :error)
+
+      inst.listen_messages
+    end
+  end
+
   describe '.process_message' do
     let(:message_processor) { PubSubModelSync::MessageProcessor }
     it 'ignore unknown message' do
@@ -63,6 +81,13 @@ RSpec.describe PubSubModelSync::ServiceKafka do
     end
     it 'deliver messages' do
       expect(producer).to receive(:deliver_messages)
+      inst.publish(message_data[:data], msg_attrs)
+    end
+    it 'print error when sending message' do
+      error = 'Error msg'
+      allow(producer).to receive(:produce).and_raise(error)
+      allow(inst).to receive(:log)
+      expect(inst).to receive(:log).with(include(error), :error)
       inst.publish(message_data[:data], msg_attrs)
     end
   end

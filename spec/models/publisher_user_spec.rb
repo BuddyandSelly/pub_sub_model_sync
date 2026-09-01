@@ -126,6 +126,13 @@ RSpec.describe PublisherUser do
         model.ps_perform_sync(:create, attrs: attrs)
       end
 
+      it 'perform with a custom class name' do
+        as_klass = 'User'
+        args = [model, anything, have_attributes(as_klass: as_klass)]
+        expect_publish_model(args)
+        model.ps_perform_sync(:create, as_klass: as_klass)
+      end
+
       it 'perform with custom publisher' do
         attrs = %i[name]
         klass = PubSubModelSync::MessagePublisher

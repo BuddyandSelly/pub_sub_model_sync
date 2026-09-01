@@ -1,6 +1,9 @@
 # Change Log
 
 ## Unreleased
+- feat: measure the specs with SimpleCov and fail the suite below 100% line or branch
+  coverage of `lib/`
+- feat: CI comments the coverage on every pull request and uploads the HTML report
 - feat: support Ruby 4.0.6, developed and tested against it
 - chore: `required_ruby_version` is now `>= 3.2` and rails `>= 7.0`
 - chore: update the development dependencies (rspec 3.13, rake 13, sqlite3 2, bundler 2.4+)

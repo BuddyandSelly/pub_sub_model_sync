@@ -289,6 +289,11 @@ bundle exec rspec    # specs, including the coverage check
 bundle exec rubocop  # style
 ```
 
+The specs are measured with [SimpleCov](https://github.com/simplecov-ruby/simplecov).
+Line and branch coverage of everything in `lib/` have to stay at 100%, the suite fails
+otherwise. The HTML report is written to `coverage/index.html`, and CI comments both
+percentages on every pull request.
+
 CI runs the suite against every Rails version in `gemfiles/`. To run one of them
 locally:
 

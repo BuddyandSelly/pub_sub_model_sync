@@ -17,6 +17,20 @@ RSpec.describe PubSubModelSync::Connector do
     end
   end
 
+  describe 'Kafka service' do
+    before { allow(config).to receive(:service_name).and_return(:kafka) }
+    it 'initializes kafka service' do
+      expect(inst.service).to be_a(PubSubModelSync::ServiceKafka)
+    end
+
+    %i[listen_messages publish stop].each do |action|
+      it "delegate .#{action} to service" do
+        expect(inst.service).to receive(action)
+        inst.send(action, {}, {})
+      end
+    end
+  end
+
   describe 'Rabbitmp' do
     before { allow(config).to receive(:service_name).and_return(:rabbit_mp) }
     it 'initializes rabbitMQ service' do

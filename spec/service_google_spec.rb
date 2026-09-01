@@ -88,6 +88,13 @@ RSpec.describe PubSubModelSync::ServiceGoogle do
       expect(inst.topic).to receive(:publish).with(payload, anything)
       inst.publish(data, attrs)
     end
+    it 'print error when sending message' do
+      error = 'Error msg'
+      allow(inst.topic).to receive(:publish).and_raise(error)
+      allow(inst).to receive(:log)
+      expect(inst).to receive(:log).with(include(error), :error)
+      inst.publish({}, {})
+    end
   end
 
   describe '.stop' do

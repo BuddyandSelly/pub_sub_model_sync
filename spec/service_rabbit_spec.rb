@@ -38,6 +38,24 @@ RSpec.describe PubSubModelSync::ServiceRabbit do
     end
   end
 
+  describe '.listen_messages when it goes wrong' do
+    it 'lets a shut down through' do
+      shut_down = PubSubModelSync::Runner::ShutDown
+      allow(inst).to receive(:subscribe_to_queue).and_raise(shut_down)
+
+      expect { inst.listen_messages }.to raise_error(shut_down)
+    end
+
+    it 'prints any other error' do
+      error = 'Connection lost'
+      allow(inst).to receive(:subscribe_to_queue).and_raise(error)
+      allow(inst).to receive(:log)
+      expect(inst).to receive(:log).with(include(error), :error)
+
+      inst.listen_messages
+    end
+  end
+
   describe '.process_message' do
     let(:message_processor) { PubSubModelSync::MessageProcessor }
     it 'ignore unknown message' do
@@ -59,6 +77,14 @@ RSpec.describe PubSubModelSync::ServiceRabbit do
       args = [delivery_info, meta_info, message]
       inst.send(:process_message, *args)
     end
+    it 'ignore own message' do
+      app_id = 'MyApplication'
+      allow(inst).to receive(:app_id).and_return(app_id)
+      expect(message_processor).not_to receive(:new)
+
+      args = [delivery_info, meta_info.merge(app_id: app_id), message]
+      inst.send(:process_message, *args)
+    end
   end
 
   describe '.publish' do
@@ -76,6 +102,29 @@ RSpec.describe PubSubModelSync::ServiceRabbit do
       allow(inst).to receive(:log)
       expect(inst).to receive(:log).with(include(error), :error)
       inst.publish('invalid data', {})
+    end
+    it 'reconnect and retry after a timeout' do
+      attempts = 0
+      allow(inst).to receive(:deliver_data) do
+        attempts += 1
+        raise Timeout::Error if attempts == 1
+      end
+      allow(inst).to receive(:log)
+      expect(inst).to receive(:log).with(include('retrying'), :error)
+
+      inst.publish({ name: 'test' }, {})
+
+      expect(attempts).to eq 2
+    end
+  end
+
+  # Module#parent_name was removed in Rails 6.1, so this always rescues to an
+  # empty string and the "skip messages published by this app" check in
+  # .process_message never matches. Documented rather than changed: fixing it
+  # changes which messages an application processes.
+  describe '#app_id' do
+    it 'is empty on Rails >= 6.1' do
+      expect(inst.send(:app_id)).to eq ''
     end
   end
 
