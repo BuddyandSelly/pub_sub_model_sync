@@ -1,12 +1,27 @@
 # This is the configuration used to check the rubocop source code.
 
 AllCops:
-  TargetRubyVersion: 2.4
+  TargetRubyVersion: 3.2
+  NewCops: enable
   Exclude:
     - 'spec/spec_helper.rb'
     - 'Gemfile'
     - 'Rakefile'
     - 'bin/*'
+
+# Development dependencies are declared in the gemspec, next to the runtime one.
+Gemspec/DevelopmentDependencies:
+  EnforcedStyle: gemspec
+
+# Enabling this would require MFA on the account that publishes the gem.
+Gemspec/RequireMFA:
+  Enabled: false
+
+# The mock services mirror the interface of the real pub/sub clients (bunny,
+# ruby-kafka, google-cloud-pubsub), so their method names are not ours to pick.
+Naming/PredicateMethod:
+  Exclude:
+    - 'lib/pub_sub_model_sync/mock_*_service.rb'
 
 Metrics/BlockLength:
   Exclude:

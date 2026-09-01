@@ -7,10 +7,10 @@ end
 
 module PubSubModelSync
   class ServiceRabbit < ServiceBase
-    attr_accessor :service, :channel, :queue, :topic
-    attr_accessor :config
+    attr_accessor :service, :channel, :queue, :topic, :config
 
     def initialize
+      super
       @config = PubSubModelSync::Config
       @service = Bunny.new(*config.bunny_connection)
     end
@@ -70,7 +70,7 @@ module PubSubModelSync
     end
 
     def app_id
-      (Rails.application.class.parent_name rescue '') # rubocop:disable Style/RescueModifier
+      Rails.application.class.parent_name rescue '' # rubocop:disable Style/RescueModifier
     end
 
     def subscribe_to_queue

@@ -278,6 +278,25 @@ Note: Be careful with collision of names
 - Add flag ```model.ps_processing``` to indicate that the current transaction is being processed by pub/sub
  
 
+## Development
+
+The gem is developed and tested against the Ruby version in
+[.ruby-version](.ruby-version), and supports Ruby >= 3.2 and Rails >= 7.0.
+
+```bash
+bundle install
+bundle exec rspec    # specs, including the coverage check
+bundle exec rubocop  # style
+```
+
+CI runs the suite against every Rails version in `gemfiles/`. To run one of them
+locally:
+
+```bash
+BUNDLE_GEMFILE=gemfiles/Gemfile_7 bundle install
+BUNDLE_GEMFILE=gemfiles/Gemfile_7 bundle exec rspec
+```
+
 ## Contributing
 
 Bug reports and pull requests are welcome on GitHub at https://github.com/owen2345/pub_sub_model_sync. This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the [Contributor Covenant](http://contributor-covenant.org) code of conduct.

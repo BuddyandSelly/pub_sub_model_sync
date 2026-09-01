@@ -3,12 +3,15 @@
 RSpec.describe PubSubModelSync::ServiceKafka do
   let(:msg_attrs) { { klass: 'User', action: 'action' } }
   let(:message_data) { { data: { msg: 'Hello' }, attributes: msg_attrs } }
+  # Stands in for Kafka::FetchedMessage. OpenStruct used to be a default gem,
+  # Ruby 4.0 no longer ships it.
+  let(:kafka_message) { Struct.new(:value, :headers, keyword_init: true) }
   let(:message) do
-    OpenStruct.new(value: message_data.to_json,
-                   headers: { 'service_model_sync' => true })
+    kafka_message.new(value: message_data.to_json,
+                      headers: { 'service_model_sync' => true })
   end
   let(:invalid_message) do
-    OpenStruct.new(headers: { 'invalid_partition' => true })
+    kafka_message.new(headers: { 'invalid_partition' => true })
   end
   let(:inst) { described_class.new }
   let(:service) { inst.service }

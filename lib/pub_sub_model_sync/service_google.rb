@@ -10,6 +10,7 @@ module PubSubModelSync
     attr_accessor :service, :topic, :subscription, :config, :subscriber
 
     def initialize
+      super
       @config = PubSubModelSync::Config
       @service = Google::Cloud::Pubsub.new(project: config.project,
                                            credentials: config.credentials)

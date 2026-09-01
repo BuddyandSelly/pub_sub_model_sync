@@ -75,7 +75,7 @@ RSpec.describe PubSubModelSync::Subscriber do
         model = model_klass.create(message)
         inst.settings[:id] = :name
         allow(model_klass).to receive(:where).and_call_original
-        expect(model_klass).to receive(:where).with(name: model.name)
+        expect(model_klass).to receive(:where).with({ name: model.name })
         inst.eval_message(message)
       end
 

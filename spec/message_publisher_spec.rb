@@ -25,7 +25,7 @@ RSpec.describe PubSubModelSync::MessagePublisher do
       it 'custom publisher' do
         attrs = %i[name email]
         publisher = PubSubModelSync::Publisher.new(attrs, model.class.name)
-        exp_data = attrs.map { |k| [k, model.send(k)] }.to_h
+        exp_data = attrs.to_h { |k| [k, model.send(k)] }
         exp_attrs = hash_including(:action, :klass)
         expect(connector).to receive(:publish).with(exp_data, exp_attrs)
         inst.publish_model(model, action, publisher)

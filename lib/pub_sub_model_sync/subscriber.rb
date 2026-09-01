@@ -54,7 +54,7 @@ module PubSubModelSync
 
     def model_identifiers(message)
       identifiers = Array(settings[:id])
-      identifiers.map { |key| [key, message[key.to_sym]] }.to_h
+      identifiers.to_h { |key| [key, message[key.to_sym]] }
     end
 
     def populate_model(model, message)

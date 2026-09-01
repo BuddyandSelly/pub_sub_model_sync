@@ -1,5 +1,13 @@
 # Change Log
 
+## Unreleased
+- feat: support Ruby 4.0.6, developed and tested against it
+- chore: `required_ruby_version` is now `>= 3.2` and rails `>= 7.0`
+- chore: update the development dependencies (rspec 3.13, rake 13, sqlite3 2, bundler 2.4+)
+- chore: CI runs Rails 7 and Rails 8 (`gemfiles/Gemfile_7`, `gemfiles/Gemfile_8`) instead
+  of Rails 4, 5 and 6
+- chore: rubocop 1.x with `TargetRubyVersion: 3.2`
+
 # 0.4.2.2 (November 29, 2020)
 - feat: rabbitMQ skip receiving messages from the same app
 - feat: rabbitmq use fanout instead of queue to deliver messages to multiple apps
