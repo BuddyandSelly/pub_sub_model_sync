@@ -5,6 +5,10 @@ gem 'bunny' # rabbit-mq
 gem 'google-cloud-pubsub' # google pub/sub
 gem 'ruby-kafka' # kafka pub/sub
 gem 'rails', '~> 7.1'
+# activesupport 7.2 encodes JSON through JSON.generate(quirks_mode: true), and json
+# 3.0 (September 2026) removed that keyword. Rails 8.1 dropped the call, so only this
+# cell needs the pin.
+gem 'json', '< 3'
 
 group :test do
   gem 'database_cleaner-active_record'
