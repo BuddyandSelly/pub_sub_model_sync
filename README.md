@@ -15,7 +15,7 @@ Add this line to your application's Gemfile:
 ```ruby
 gem 'pub_sub_model_sync'
 
-gem 'google-cloud-pubsub' # to use google pub/sub service
+gem 'google-cloud-pubsub' # to use google pub/sub service (>= 3.0)
 gem 'bunny' # to use rabbit-mq pub/sub service
 gem 'ruby-kafka' # to use apache kafka pub/sub service
 ```

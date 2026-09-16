@@ -16,6 +16,8 @@ RSpec.describe PubSubModelSync::ServiceGoogle do
   let(:inst) { described_class.new }
   before { allow(inst).to receive(:sleep) }
 
+  let(:not_found) { Google::Cloud::NotFoundError.new('not found') }
+
   describe 'initializer' do
     it 'connect to pub/sub service' do
       expect(inst.service).not_to be_nil
@@ -23,24 +25,39 @@ RSpec.describe PubSubModelSync::ServiceGoogle do
     it 'connect to topic' do
       expect(inst.topic).not_to be_nil
     end
+    it 'creates the topic when the project does not have one yet' do
+      service = PubSubModelSync::MockGoogleService.new
+      allow(Google::Cloud::Pubsub).to receive(:new).and_return(service)
+      allow(service).to receive(:publisher)
+        .and_invoke(->(*) { raise not_found }, ->(*) { 'publisher' })
+      expect(service.topic_admin).to receive(:create_topic)
+      expect(described_class.new.topic).to eq('publisher')
+    end
   end
 
   describe '.listen_messages' do
     it 'subscribe to topic' do
-      expect(inst.topic).to receive(:subscription)
+      expect(inst.service).to receive(:subscriber).and_call_original
       inst.listen_messages
     end
     it 'subscription listen for new messages' do
-      expect(inst.topic.subscription).to receive(:listen).and_call_original
+      expect(inst.service.subscriber).to receive(:listen).and_call_original
       inst.listen_messages
     end
     it 'start subscriber' do
-      subscriber = inst.topic.subscription.listen
+      subscriber = inst.service.subscriber.listen
       expect(subscriber).to receive(:start)
       inst.listen_messages
     end
     it 'wait for messages' do
       expect(inst).to receive(:sleep)
+      inst.listen_messages
+    end
+    it 'creates the subscription when the topic does not have one yet' do
+      subscriber = PubSubModelSync::MockGoogleService::MockSubscriber.new
+      allow(inst.service).to receive(:subscriber)
+        .and_invoke(->(*) { raise not_found }, ->(*) { subscriber })
+      expect(inst.service.subscription_admin).to receive(:create_subscription)
       inst.listen_messages
     end
   end

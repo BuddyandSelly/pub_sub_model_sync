@@ -6,16 +6,24 @@ rescue LoadError # rubocop:disable Lint/SuppressedException
 end
 
 module PubSubModelSync
+  # google-cloud-pubsub 3.0 reorganised the client: Project#topic and
+  # Topic#subscription are gone, replaced by Project#publisher and
+  # Project#subscriber, both of which look the resource up and raise
+  # NotFoundError rather than answering nil. Creating either one now goes
+  # through the admin clients.
+  #
+  # The accessors keep their names and their roles: +topic+ is what messages are
+  # published to, +subscription+ is what is listened on, and +subscriber+ is the
+  # listener that #stop stops.
   class ServiceGoogle < ServiceBase
     attr_accessor :service, :topic, :subscription, :config, :subscriber
 
     def initialize
       super
       @config = PubSubModelSync::Config
-      @service = Google::Cloud::Pubsub.new(project: config.project,
+      @service = Google::Cloud::Pubsub.new(project_id: config.project,
                                            credentials: config.credentials)
-      @topic = service.topic(config.topic_name) ||
-               service.create_topic(config.topic_name)
+      @topic = publisher_for_topic
     end
 
     def listen_messages
@@ -45,9 +53,26 @@ module PubSubModelSync
 
     private
 
+    def publisher_for_topic
+      service.publisher(config.topic_name)
+    rescue Google::Cloud::NotFoundError
+      service.topic_admin
+             .create_topic(name: service.topic_path(config.topic_name))
+      service.publisher(config.topic_name)
+    end
+
     def subscribe_to_topic
-      topic.subscription(config.subscription_name) ||
-        topic.subscribe(config.subscription_name)
+      service.subscriber(config.subscription_name)
+    rescue Google::Cloud::NotFoundError
+      create_subscription
+      service.subscriber(config.subscription_name)
+    end
+
+    def create_subscription
+      service.subscription_admin.create_subscription(
+        name: service.subscription_path(config.subscription_name),
+        topic: service.topic_path(config.topic_name)
+      )
     end
 
     def process_message(received_message)

@@ -6,24 +6,40 @@ RSpec.describe 'the mock services' do
   describe PubSubModelSync::MockGoogleService do
     let(:service) { described_class.new }
 
-    it 'answers with the same topic' do
-      expect(service.topic).to be(service.topic)
-      expect(service.create_topic).to be(service.topic)
+    it 'answers with the same publisher and subscriber' do
+      expect(service.publisher('topic')).to be(service.publisher('topic'))
+      expect(service.subscriber('sub')).to be(service.subscriber('sub'))
+    end
+
+    it 'answers the admin interface' do
+      sub_admin = service.subscription_admin
+
+      expect(service.topic_admin).to be(service.topic_admin)
+      expect(sub_admin).to be(service.subscription_admin)
+      expect(service.topic_admin.create_topic(name: 'topic')).to be true
+      expect(sub_admin.create_subscription(name: 'sub', topic: 'topic'))
+        .to be true
+    end
+
+    it 'answers the resource paths' do
+      expect(service.topic_path('name'))
+        .to eq('projects/mock-project/topics/name')
+      expect(service.subscription_path('name'))
+        .to eq('projects/mock-project/subscriptions/name')
     end
 
     it 'answers the listener interface' do
-      subscription = service.topic.subscription
-      subscriber = subscription.listen
+      subscriber = service.subscriber('sub')
+      listener = subscriber.listen
 
-      expect(service.topic.subscribe).to be(subscription)
-      expect(subscription.listen).to be(subscriber)
-      expect(subscriber.start).to be true
-      expect(subscriber.stop.wait!).to be true
-      expect(subscriber.stop!).to be(subscriber.stop)
+      expect(subscriber.listen).to be(listener)
+      expect(listener.start).to be true
+      expect(listener.stop.wait!).to be true
+      expect(listener.stop!).to be(listener.stop)
     end
 
     it 'answers publishing' do
-      expect(service.topic.publish('payload', {})).to be true
+      expect(service.publisher('topic').publish('payload', {})).to be true
     end
   end
 

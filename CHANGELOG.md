@@ -1,6 +1,9 @@
 # Change Log
 
 ## Unreleased
+- fix: support google-cloud-pubsub 3.x, which renamed `project:` to `project_id:` and
+  replaced `Project#topic`/`Topic#subscription` with `Project#publisher`/`Project#subscriber`
+  and the `topic_admin`/`subscription_admin` clients. 2.x is no longer supported
 - feat: measure the specs with SimpleCov and fail the suite below 100% line or branch
   coverage of `lib/`
 - feat: CI comments the coverage on every pull request and uploads the HTML report
