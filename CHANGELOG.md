@@ -1,20 +1,138 @@
 # Change Log
 
-## Unreleased
-- fix: support google-cloud-pubsub 3.x, which renamed `project:` to `project_id:` and
-  replaced `Project#topic`/`Topic#subscription` with `Project#publisher`/`Project#subscriber`
-  and the `topic_admin`/`subscription_admin` clients. 2.x is no longer supported
-- feat: measure the specs with SimpleCov and fail the suite below 100% line or branch
-  coverage of `lib/`
-- feat: CI comments the coverage on every pull request and uploads the HTML report
-- feat: support Ruby 4.0.6, developed and tested against it
-- chore: `required_ruby_version` is now `>= 3.2` and rails `>= 7.0`
-- chore: update the development dependencies (rspec 3.13, rake 13, sqlite3 2, bundler 2.4+)
-- chore: CI runs Rails 7 and Rails 8 (`gemfiles/Gemfile_7`, `gemfiles/Gemfile_8`) instead
-  of Rails 4, 5 and 6
-- chore: rubocop 1.x with `TargetRubyVersion: 3.2`
+For recent releases list go to: https://github.com/owen2345/pub_sub_model_sync/releases
 
-# 0.4.2.2 (November 29, 2020)
+# 1.9.3.1 (Buddy & Selly fork)
+- feat: rewrite the google service against the google-cloud-pubsub 3.x client
+  (`publisher`/`subscriber` and the topic and subscription admin clients)
+- feat: mock the 3.x client, including the topic and the subscription having to
+  be created before they can be looked up
+- fix: restore `PubSubModelSync::Runner::ShutDown`, which both the kafka and the
+  rabbit listener still rescue
+
+# 1.2.1 (October 28, 2021)
+chore: improve logs
+
+# 1.2.0 (October 28, 2021)
+- feat: rename Payload `:key` into `:internal_key` to avoid confusions while debugging
+
+# 1.1.1 (October 25, 2021)
+- feat: do not exclude `ordering_key topic_name` when delivering a notification (required when debugging)
+- doc: improve docs
+
+# 1.1.0 (October 25, 2021)
+- feat: change `transactions_max_buffer` default value to 1 to deliver notifications once they were called
+- feat: use `after_commit` instead of `before_commit` callback and remove the horrible AR patch for rails 4
+
+# 1.0.1 (August 20, 2021)
+- refactor: improve service exit when running in k8s
+
+# 1.0 (June 13, 2021)
+This version includes many changes that was refactored from previous version, and thus it needs manual changes to migrate into this version. 
+- Refactor: Subscribers param renamed `from_action` into `to_action` and added support for block or lambda 
+- Feat: Improved `ps_subscribe` to accept new arguments and support for property mappings
+- Refactor: Refactored `ps_publish` to be called manually (removes notification assumptions) and accept for new arguments
+- Feat: Added `ps_after_action` to listen CRUD events to send notifications in the expected order
+- Feat: Added `config.default_topic_name` to define default topic name whe publishing (by default `config.topic_name`)
+- Refactor: Refactored PubSub Transactions to support rollbacks (any exception inside transactions can automatically cancel all pending notifications: configurable through `config.transactions_use_buffer`)
+- Feat: Improved CRUD transactions to deliver inner notifications in the expected order to keep data consistency
+- System refactor: Added subscriber runner
+- Fix: Class notifications can only be listened by class subscriptions
+- Refactor: Removed `publish_model_data` to have a unique model publisher `ps_publish`
+- Refactor: Renamed `ps_before_sync` into `ps_before_publish`, `ps_after_sync` into `ps_after_publish`
+- Refactor: Renamed `payload.attributes` into `payload.info`
+- Feat: Support for plain Ruby Objects (Non ActiveRecord models)
+- Fix: Retry errors for 5 times before exiting notifications listener
+- Feat: Added transactions max_buffer
+- Feat: add `ps_perform_publish` to perform the callback for a specific action 
+- Feat: Removed `ps_skip_sync` callback
+
+# 0.6.0 (March 03, 2021)
+- feat: add support to include custom payload headers
+- feat: add pubsub transactions to process all payloads inside in the same order they were published
+- feat: when a model is created/updated/destroyed, process all related payloads in a single transaction
+- feat: add method to save processed payload (:ps_processing_payload) when saving sync
+- feat: add "ordering_key" support to process all payloads with the same key in the same order
+- feat: start multiple workers to process async kafka messages when starting service listeners
+- feat: make async publisher by reusing exchange connection (rabbit)
+- feat: add support for forced_ordering_key to always be used as the ordering_key if defined
+- feat: add feature to publish a message to a custom and/or multiple topics 
+- feat: add model custom action subscriber and publisher
+- feat: add docker compose settings
+
+# 0.5.10 (February 13, 2021)
+- feat: remove duplicated callback :ps_before_save_sync (same result can be achieved with :ps_before_save_sync)
+- feat: improve message starter to retry when failed or exit system when persists
+- feat: fix and retry when database connection error (PG::UnableToSend)
+- feat: add method to save processed payload (:ps_processing_payload) when saving sync
+- chore: improved readme (Thanks @CharlieIGG)
+
+# 0.5.9.1 (February 10, 2021)
+- feat: move :key into headers
+
+# 0.5.9 (February 10, 2021)
+- feat: reformat :publish and :process methods to include non silence methods
+- feat: add notification key to payloads (can be used for caching strategies)
+
+# 0.5.8.2 (February 05, 2021)
+- fix: restore google pubsub topic settings
+
+# 0.5.8.1 (February 05, 2021)
+- fix: keep message ordering with google pubsub
+
+# 0.5.8 (January 29, 2021)
+- fix: keep message ordering with google pubsub
+
+# 0.5.7.1 (January 26, 2021)
+- fix: does not call :on_error_processing when processing a message 
+
+# 0.5.7 (January 13, 2021)
+- feat: add method to preload sync listeners
+
+# 0.5.6 (January 12, 2021)
+- feat: add payload validation
+- feat: add method to rebuild payload
+
+# 0.5.5 (January 11, 2021)
+- feat: google-pub/sub receive messages in the same order they were delivered
+
+# 0.5.4.1 (January 8, 2021)
+- fix: google-pub/sub receive messages sequentially and not in parallel (default 5 threads).
+
+# 0.5.4 (January 8, 2021)
+- fix: exclude identifiers when syncing model
+- feat: callbacks support for future extra params
+- feat: make connectors configurable
+- feat: add :process! and :process, :publish!, :publish methods to payload
+- feat: auto retry 2 times when "could not obtain a database connection within 5.000 seconds..." error occurs
+
+# 0.5.3 (December 30, 2020)
+- fix: kafka consume all messages from different apps
+- style: use the correct consumer key
+
+# 0.5.2 (December 30, 2020)
+- fix: rabbitmq deliver messages to all subscribers
+- fix: rabbitmq persist messages to recover after restarting
+
+# 0.5.1.1 (December 29, 2020)
+- Hotfix: auto convert class name into string
+
+# 0.5.1 (December 24, 2020)
+- feat: rename publisher callbacks to be more understandable
+- feat: add callbacks to listen when processing a message (before saving sync)
+
+# 0.5.0.1 (December 22, 2020)
+- fix: add missing rabbit mock method
+
+# 0.5.0 (December 22, 2020)
+- feat: add :publish! and :process! methods to payloads
+- feat: add ability to disable publisher globally
+- fix: skip notifications from the same application
+- fix: rabbitmq use fanout instead of queue to deliver messages to multiple apps
+- refactor: include payload object to carry message info
+- feat: include notification events (when publishing and when processing messages)
+
+# 0.4.2.2 (November 29, 2020, deleted cause of typo)
 - feat: rabbitMQ skip receiving messages from the same app
 - feat: rabbitmq use fanout instead of queue to deliver messages to multiple apps
  
