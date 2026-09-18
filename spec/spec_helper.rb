@@ -1,6 +1,20 @@
 # frozen_string_literal: true
 
 require 'bundler/setup'
+require 'simplecov'
+
+SimpleCov.start do
+  enable_coverage :branch
+  primary_coverage :branch
+
+  # Everything the gem ships has to be covered, whether it was loaded or not.
+  cover 'lib/**/*.{rb,rake}'
+  # Loaded by the gemspec, and therefore by bundler, before coverage starts.
+  skip 'lib/pub_sub_model_sync/version.rb'
+
+  minimum_coverage line: 100, branch: 100
+end
+
 require 'pub_sub_model_sync'
 require 'active_record'
 require 'spec_init_model'
@@ -16,6 +30,8 @@ end
 
 # raise sync errors during tests
 PubSubModelSync::Config.logger = :raise_error
+PubSubModelSync::Config.debug = true
+PubSubModelSync::Config.topic_name = 'ps_sync'
 
 RSpec.configure do |config|
   # Enable flags like --only-failures and --next-failure
@@ -28,10 +44,15 @@ RSpec.configure do |config|
     c.syntax = :expect
   end
 
+  config.before(:each) do
+    klass = PubSubModelSync::ServiceBase
+    allow_any_instance_of(klass).to receive(:same_app_message?).and_return(false)
+  end
+
   # mock google service
   config.before(:each) do
     pub_sub_mock = PubSubModelSync::MockGoogleService.new
-    allow(Google::Cloud::Pubsub).to receive(:new).and_return(pub_sub_mock)
+    allow(Google::Cloud::PubSub).to receive(:new).and_return(pub_sub_mock)
   end
 
   # mock rabbit service
@@ -45,6 +66,11 @@ RSpec.configure do |config|
     kafka_mock = PubSubModelSync::MockKafkaService.new
     allow(Kafka).to receive(:new).and_return(kafka_mock)
   end
+
+  # silence default exception from on_error_processing hook
+  config.before(:each) do
+    allow(PubSubModelSync::Config.on_error_processing).to receive(:call)
+  end
 end
 
 # database cleaner
@@ -53,6 +79,10 @@ RSpec.configure do |config|
   config.before(:suite) do
     DatabaseCleaner.strategy = :deletion
     DatabaseCleaner.clean_with(:truncation)
+  end
+
+  config.before(:each, truncate: true) do
+    DatabaseCleaner.strategy = :truncation
   end
 
   config.around(:each) do |example|

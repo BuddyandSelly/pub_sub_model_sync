@@ -13,16 +13,34 @@ RSpec.describe PubSubModelSync::Runner do
   end
 
   it '.preload_framework' do
-    expect(inst).to receive(:preload_framework!)
+    expect(described_class).to receive(:preload_listeners)
   end
 
   it '.start_listeners' do
     expect(connector).to receive(:listen_messages)
   end
 
-  it 'shutdown' do
-    error_klass = PubSubModelSync::Runner::ShutDown
-    allow(inst).to receive(:trap_signals!).and_raise(error_klass)
-    expect(connector).to receive(:stop)
+  describe '.preload_listeners' do
+    # The gem also runs outside rails, and only preloads what is there
+    it 'preloads what the host application offers' do
+      hide_const('Rails')
+      loader = double('Zeitwerk::Loader', eager_load_all: true)
+      stub_const('Zeitwerk::Loader', loader)
+
+      described_class.preload_listeners
+
+      expect(loader).to have_received(:eager_load_all)
+    end
+  end
+
+  it 'stops the process when it is signalled' do
+    handler = nil
+    allow(Signal).to receive(:trap) { |_signal, signal_handler| handler = signal_handler }
+    allow(inst).to receive(:puts)
+
+    inst.send(:trap_signals!)
+
+    expect { handler.call(Signal.list['TERM']) }.to raise_error(SystemExit)
+    expect(inst).to have_received(:puts).with(include('received TERM'))
   end
 end

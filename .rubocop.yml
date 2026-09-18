@@ -1,23 +1,68 @@
 # This is the configuration used to check the rubocop source code.
 
+# RuboCop replaces its default AllCops/Exclude with the one below instead of
+# adding to it, and CI installs the bundle into vendor/bundle, where a gem
+# with a .rubocop.yml of its own would be picked up.
+inherit_mode:
+  merge:
+    - Exclude
+
 AllCops:
-  TargetRubyVersion: 2.4
+  TargetRubyVersion: 3.2
+  NewCops: enable
   Exclude:
     - 'spec/spec_helper.rb'
     - 'Gemfile'
     - 'Rakefile'
     - 'bin/*'
 
+# Development dependencies are declared in the gemspec, next to the runtime one.
+Gemspec/DevelopmentDependencies:
+  EnforcedStyle: gemspec
+
+# Enabling this would require MFA on the account that publishes the gem.
+Gemspec/RequireMFA:
+  Enabled: false
+
+# Named block parameters say what the block is for; anonymous forwarding
+# would only save the four characters of the name.
+Naming/BlockForwarding:
+  EnforcedStyle: explicit
+
+# The google service carries the create-then-look-up helpers that the 3.x
+# client needs for both topics and subscriptions.
+Metrics/ClassLength:
+  Exclude:
+    - 'lib/pub_sub_model_sync/service_google.rb'
+
+# The mock services mirror the interface of the real pub/sub clients (bunny,
+# ruby-kafka, google-cloud-pubsub), so their method names are not ours to pick.
+# The two publisher methods run the cancel callbacks of the configuration and
+# answer whether the publish may go ahead, so they are not only asking either.
+Naming/PredicateMethod:
+  AllowedMethods:
+    - ensure_publish
+    - ensure_model_publish
+  Exclude:
+    - 'lib/pub_sub_model_sync/mock_*_service.rb'
+
 Metrics/BlockLength:
   Exclude:
     - 'spec/**/*.rb'
 
+# The upstream gem is written at 120 columns; reformatting every line it
+# ships would make each future merge from upstream a conflict.
 Layout/LineLength:
-  Max: 80
+  Max: 120
 
 Style/SymbolArray:
   Exclude:
     - 'Gemfile'
+
+# The services and the payload wrappers deliberately do not chain to their
+# parent's initializer, as upstream has it.
+Lint/MissingSuper:
+  Enabled: false
 
 Style/Documentation:
   Enabled: false

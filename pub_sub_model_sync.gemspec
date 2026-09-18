@@ -5,7 +5,7 @@ $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
 require 'pub_sub_model_sync/version'
 
 Gem::Specification.new do |spec|
-  spec.required_ruby_version = '>= 2.4'
+  spec.required_ruby_version = '>= 3.2'
   spec.name          = 'pub_sub_model_sync'
   spec.version       = PubSubModelSync::VERSION
   spec.authors       = ['Owen']
@@ -33,10 +33,11 @@ Gem::Specification.new do |spec|
   spec.executables   = spec.files.grep(%r{^exe/}) { |f| File.basename(f) }
   spec.require_paths = ['lib']
 
-  spec.add_dependency 'rails'
+  spec.add_dependency 'rails', '>= 7.0'
 
-  spec.add_development_dependency 'bundler'
-  spec.add_development_dependency 'rake'
-  spec.add_development_dependency 'rspec'
-  spec.add_development_dependency 'sqlite3'
+  spec.add_development_dependency 'bundler', '>= 2.4'
+  spec.add_development_dependency 'rake', '~> 13.0'
+  spec.add_development_dependency 'rspec', '~> 3.13'
+  spec.add_development_dependency 'simplecov', '~> 1.1'
+  spec.add_development_dependency 'sqlite3', '~> 2.0'
 end

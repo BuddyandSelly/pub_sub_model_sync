@@ -2,9 +2,11 @@
 /.yardoc
 /_yardoc/
 /coverage/
+/db/*.sqlite3
 /doc/
 /pkg/
 /spec/reports/
+/gemfiles/*.lock
 /tmp/
 
 # rspec failure tracking

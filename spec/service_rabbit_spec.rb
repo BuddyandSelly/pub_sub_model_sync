@@ -3,86 +3,176 @@
 RSpec.describe PubSubModelSync::ServiceRabbit do
   let(:meta_info) { { type: 'service_model_sync' } }
   let(:invalid_meta_info) { { type: 'unknown' } }
-  let(:delivery_info) { {} }
-  let(:msg_attrs) { { klass: 'User', action: 'action' } }
-  let(:data) { { msg: 'Hello' } }
-  let(:message) { { data: data, attributes: msg_attrs }.to_json }
+  let(:delivery_info) { double(delivery_tag: true) }
+  let(:payload_attrs) { { klass: 'Tester', action: :test } }
+  let(:payload) { PubSubModelSync::Payload.new({}, payload_attrs) }
   let(:inst) { described_class.new }
   let(:service) { inst.service }
   let(:channel) { service.channel }
+  let(:queue_klass) { PubSubModelSync::MockRabbitService::MockQueue }
+  let(:queue) { instance_double(queue_klass, channel: channel) }
+  let(:channel_klass) { PubSubModelSync::MockRabbitService::MockChannel }
 
-  before { allow(inst).to receive(:loop) }
+  before do
+    allow(inst).to receive(:loop)
+    allow(Process).to receive(:exit!)
+  end
 
   describe 'initializer' do
-    it 'connect to pub/sub service' do
+    it 'connects to pub/sub service' do
       expect(service).not_to be_nil
     end
   end
 
   describe '.listen_messages' do
     after { inst.listen_messages }
-    it 'start service' do
+    it 'starts service' do
       expect(service).to receive(:start)
     end
-    it 'create channel' do
+    it 'creates channel' do
       expect(service).to receive(:create_channel).and_call_original
     end
+
     it 'subscribe to queue' do
       expect(channel).to receive(:fanout).and_call_original
     end
-    it 'subscribe to topic' do
-      expect(channel).to receive(:topic).and_call_original
+
+    it 'subscribes to topic' do
+      expect(channel).to receive(:fanout).and_call_original
     end
-    it 'listening messages' do
+    it 'listens for messages' do
       expect(channel.queue).to receive(:subscribe)
+    end
+
+    it 'connects to multiple topics if provided' do
+      names = ['topic 1', 'topic 2']
+      allow(inst).to receive(:topic_names).and_return(names)
+      names.each do |name|
+        expect_any_instance_of(channel_klass).to receive(:fanout).with(name)
+      end
     end
   end
 
   describe '.process_message' do
     let(:message_processor) { PubSubModelSync::MessageProcessor }
-    it 'ignore unknown message' do
-      expect(message_processor).not_to receive(:new)
-      args = [delivery_info, invalid_meta_info, message]
-      inst.send(:process_message, *args)
-    end
-    it 'process message' do
-      args = [data, any_args]
-      expect(message_processor).to receive(:new).with(*args).and_call_original
-      args = [delivery_info, meta_info, message]
-      inst.send(:process_message, *args)
-    end
-    it 'error processing' do
-      error_msg = 'Invalid params'
-      allow(message_processor).to receive(:new).and_raise(error_msg)
-      expect(inst).to receive(:log).with(include(error_msg), :error)
+    before { allow(inst).to receive(:log) }
 
-      args = [delivery_info, meta_info, message]
+    it 'ignores unknown message' do
+      expect(message_processor).not_to receive(:new)
+      args = [queue, delivery_info, invalid_meta_info, payload.to_json]
       inst.send(:process_message, *args)
+    end
+
+    describe 'when received a valid message' do
+      let(:args) { [queue, delivery_info, meta_info, payload.to_json] }
+
+      it 'sends payload to message processor' do
+        expect(message_processor)
+          .to receive(:new).with(be_kind_of(payload.class)).and_call_original
+        inst.send(:process_message, *args)
+      end
+
+      it 'acks the message once processed the message to mark as processed' do
+        expect(channel).to receive(:ack)
+        inst.send(:process_message, *args)
+      end
+    end
+
+    describe 'when failed' do
+      let(:args) { [queue, delivery_info, meta_info, payload.to_json] }
+      let(:error_msg) { 'Error syncing data' }
+      before { allow(message_processor).to receive(:new).and_raise(error_msg) }
+
+      it 'raises the error' do
+        expect { inst.send(:process_message, *args) }.to raise_error(error_msg)
+      end
+
+      it 'does not ack the message to auto retry by pubsub' do
+        expect(channel).not_to receive(:ack)
+        inst.send(:process_message, *args) rescue nil # rubocop:disable Style/RescueModifier
+      end
     end
   end
 
   describe '.publish' do
-    it 'delivery message' do
-      data = { name: 'test' }
-      attrs = { id: 10 }
-      payload = { data: data, attributes: attrs }
+    it 'deliveries message' do
       expected_args = [payload.to_json, hash_including(:routing_key, :type)]
-      expect(channel.topic).to receive(:publish).with(*expected_args)
-      inst.publish(data, attrs)
+      expect_publish_with(*expected_args)
+      inst.publish(payload)
     end
-    it 'print error when sending message' do
-      error = 'Error msg'
-      expect(channel.topic).to receive(:publish).and_raise(error)
+
+    it 'retries 2 times when TimeoutError' do
+      error = 'retrying....'
+      allow(inst).to receive(:deliver_data).and_raise(Timeout::Error)
       allow(inst).to receive(:log)
-      expect(inst).to receive(:log).with(include(error), :error)
-      inst.publish('invalid data', {})
+      expect(inst).to receive(:log).with(include(error), :error).twice
+      inst.publish(payload) rescue nil # rubocop:disable Style/RescueModifier
+    end
+
+    it 'uses custom exchange when defined :topic_name' do
+      topic_name = 'custom_topic_name'
+      payload.headers[:topic_name] = topic_name
+      expect(channel).to receive(:fanout).with(topic_name).and_call_original
+      inst.publish(payload)
+    end
+
+    it 'publishes to all topics when defined' do
+      topic_names = %w[topic1 topic2]
+      payload.headers[:topic_name] = topic_names
+      topic_names.each do |topic_name|
+        expect(channel).to receive(:fanout).with(topic_name).and_call_original
+      end
+      inst.publish(payload)
+    end
+
+    it 'uses :ordering_key as the :routing_key when defined' do
+      order_key = 'custom_order_key'
+      payload.headers[:ordering_key] = order_key
+      expect_publish_with(anything, hash_including(routing_key: order_key))
+      inst.publish(payload)
     end
   end
 
   describe '.stop' do
-    it 'stop current subscription' do
+    it 'stops current subscription' do
       expect(service).to receive(:close)
       inst.stop
+    end
+  end
+
+  private
+
+  def expect_publish_with(*args)
+    expect_any_instance_of(queue_klass).to receive(:publish).with(*args)
+  end
+
+  describe 'when listening fails' do
+    before { allow(inst).to receive(:log) }
+
+    it 'logs a clean stop when the runner shuts it down' do
+      allow(inst).to receive(:subscribe_to_queues).and_raise(PubSubModelSync::Runner::ShutDown)
+
+      inst.listen_messages
+
+      expect(inst).to have_received(:log).with('Listener stopped')
+    end
+
+    it 'logs any other error' do
+      allow(inst).to receive(:subscribe_to_queues).and_raise('Invalid connection')
+
+      inst.listen_messages
+
+      expect(inst).to have_received(:log).with(include('Error listening message'), :error)
+    end
+  end
+
+  describe 'when a message of another service arrives while not debugging' do
+    before { allow(PubSubModelSync::Config).to receive(:debug).and_return(false) }
+
+    it 'ignores it silently' do
+      expect(PubSubModelSync::MessageProcessor).not_to receive(:new)
+
+      inst.send(:process_message, queue, delivery_info, invalid_meta_info, payload.to_json)
     end
   end
 end
